@@ -1,0 +1,11 @@
+[package]
+name = "msh"
+version = "0.1.0"
+authors = ["Wesley Van Melle <wvanmelle@ascentis.com>"]
+edition = "2018"
+
+[dependencies]
+dirs = "*"
+env_logger = "*"
+log = "*"
+rustyline = "*"
