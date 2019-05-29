@@ -1,14 +1,28 @@
 #[macro_use]
+extern crate clap;
+#[macro_use]
+extern crate derive_builder;
+#[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate log;
+
+use clap::Arg;
 
 use env_logger;
 
+use regex::{Captures, Regex};
+
 use rustyline::{config::Configurer, error::ReadlineError, Cmd, Editor, Helper, KeyPress};
 
+use std::collections::HashSet;
 use std::env;
-use std::io::{Error as IOError, ErrorKind, Result as IOResult};
+use std::fmt::{Display, Error as FmtError, Formatter};
+use std::fs::File;
+use std::io::{prelude::*, stdin, Error as IOError, ErrorKind, Result as IOResult};
+use std::mem;
 use std::path::PathBuf;
-use std::process::Command;
+// use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 enum Action {
@@ -16,6 +30,11 @@ enum Action {
     Buffer(String),
     // StoreEnv{ name: String, value: String },
     // RemoveEnv{ name: String },
+    Register(Vec<String>),
+    // RegisterFile(String),
+    // Unregister(Vec<String>),
+    // ClearRegistry(Vec<String>),
+    Dump,
     Exit(Option<String>),
 }
 
@@ -26,6 +45,14 @@ enum Runnable {
 }
 
 impl Runnable {
+    pub fn noop() -> Runnable {
+        Runnable::Action(Action::Loop)
+    }
+
+    pub fn exit(s: Option<String>) -> Runnable {
+        Runnable::Action(Action::Exit(s))
+    }
+
     pub fn run(self) -> Action {
         match self {
             Runnable::Action(a) => a,
@@ -37,89 +64,197 @@ impl Runnable {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Hash, Builder)]
+#[builder(setter(into))]
+struct MshConfig {
+    #[builder(default)]
+    preload_dirs: Vec<String>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
 struct Context {
-    buffer: Option<String>,
+    buffer: String,
+    dir_registry: HashSet<PathBuf>,
 }
 
 impl Context {
-    pub fn new() -> Self {
-        let buffer = None;
-        Self { buffer }
-    }
-
     pub fn push_buffer(&mut self, push: &str) {
         debug!("Pushing line to buffer: {}", push);
         if log_enabled!(log::Level::Trace) {
-            trace!(
-                "Current buffer contents: {}",
-                self.buffer.as_ref().unwrap_or(&"".to_owned())
-            );
+            trace!("Current buffer contents: {}", self.buffer);
         };
-        let mut buf = self.buffer.take().unwrap_or_else(|| String::new());
-        buf.push_str(push);
-        trace!("New buffer contents: {}", buf);
-        self.buffer = Some(buf);
+        // let mut buf = self.buffer.take().unwrap_or_else(|| String::new());
+        self.buffer.push_str(push);
+        trace!("New buffer contents: {}", self.buffer);
+        // self.buffer = buf;
     }
 
     pub fn take_buffer(&mut self, join_with: &str) -> String {
-        let full_line = match self.buffer.take() {
-            None => join_with.to_owned(),
-            Some(s) => format!("{}{}", s, join_with),
-        };
+        // let full_line = match self.buffer.take() {
+        //     None => join_with.to_owned(),
+        //     Some(s) => format!("{}{}", s, join_with),
+        // };
+        let mut full_line = String::new();
+        self.buffer.push_str(join_with);
+        mem::swap(&mut full_line, &mut self.buffer);
         trace!("Buffer removed, resulting contents: {}", full_line);
+        trace!("Current buffer contents after removal: \"{}\"", self.buffer);
         full_line
     }
 
     pub fn has_buffer(&self) -> bool {
-        self.buffer.is_some()
+        !self.buffer.is_empty()
+    }
+
+    pub fn register(&mut self, path: PathBuf) -> Result<(PathBuf, bool), String> {
+        let real_path = path.canonicalize().map_err(to_string)?;
+        Ok((real_path.clone(), self.dir_registry.insert(real_path)))
+    }
+}
+
+impl Display for Context {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), FmtError> {
+        // formatter.write_str("Current buffer contents: ")?;
+        // formatter.write_str(&self.buffer)?;
+        // formatter.write_str("\n");
+        writeln!(formatter, "Registered directories:")?;
+        for path in &self.dir_registry {
+            writeln!(formatter, "{}", &path.display())?;
+        }
+        Ok(())
     }
 }
 
 fn run_executable(args: Vec<String>) {
-    assert!(args.len() >= 1);
+    assert!(!args.is_empty());
     if log_enabled!(log::Level::Trace) {
         for arg in args.iter().by_ref() {
             trace!("Arg found: \"{}\"", arg);
         }
     };
-    let output = Command::new(&args[0])
-        .args(&args[1..])
-        .output()
-        .expect("failed to execute the process");
-    info!("Captured raw stdout: {:?}", String::from_utf8(output.stdout).expect("command output was not UTF-8"));
+    println!("Execute command: {:?}", args);
+    // info!(
+    //     "Captured raw stdout: {:?}",
+    //     String::from_utf8(output.stdout).expect("command output was not UTF-8")
+    // );
 }
 
-fn get_cwd<'a>() -> IOResult<String> {
+fn get_cwd() -> IOResult<String> {
     let cwd = env::current_dir()?.to_string_lossy().to_string();
     trace!("current dir: {}", cwd);
     Ok(cwd)
 }
 
 fn get_prompt(ctx: &Context) -> IOResult<String> {
-    match ctx.has_buffer() {
-        true => Ok("... ".to_owned()),
-        false => {
-            let mut prompt = get_cwd()?;
-            prompt.push_str("> ");
+    if ctx.has_buffer() {
+        Ok("... ".to_owned())
+    } else {
+        let mut prompt = get_cwd()?;
+        prompt.push_str("> ");
 
-            trace!("prompt generated: {}", prompt);
-            Ok(prompt)
+        trace!("prompt generated: {}", prompt);
+        Ok(prompt)
+    }
+}
+
+fn parse_command_input(caps: Captures) -> Option<Runnable> {
+    let maybe_args = caps.name("args");
+    let command = caps.name("command").unwrap().as_str();
+
+    trace!("Parsing command input -- command: \"{}\"", command);
+
+    let opt: Runnable = match command {
+        "dump" => Runnable::Action(Action::Dump),
+        "reg" | "register" => {
+            // unimplemented!();
+            match maybe_args {
+                None => {
+                    eprintln!("register command takes at least 1 argument, found 0");
+                    Runnable::noop()
+                }
+                Some(s) => Runnable::Action(Action::Register(
+                    s.as_str()
+                        .trim()
+                        .split_whitespace()
+                        .map(|s| s.to_owned())
+                        .collect(),
+                )),
+            }
+        }
+        "unreg" | "unregister" => {
+            unimplemented!();
+            // match maybe_args {
+            //     None => {
+            //         eprintln!("unregister command takes at least 1 argument, found 0");
+            //         Runnable::noop()
+            //     }
+            //     Some(s) => Runnable::Action(Action::Unregister(
+            //         s.as_str()
+            //             .trim()
+            //             .split_whitespace()
+            //             .map(|s| s.to_owned())
+            //             .collect(),
+            //     )),
+            // }
+        }
+        "clreg" | "clear-register" => {
+            unimplemented!();
+            // match maybe_args {
+            //     None => Runnable::Action(Action::ClearRegistry(vec![])),
+            //     Some(s) => Runnable::Action(Action::ClearRegistry(
+            //         s.as_str()
+            //             .trim()
+            //             .split_whitespace()
+            //             .map(|s| s.to_owned())
+            //             .collect(),
+            //     )),
+            // }
+        }
+        "regfile" | "register-file" => {
+            unimplemented!();
+            // match maybe_args {
+            //     None => {
+            //         eprintln!("unregister command takes 1 argument, found 0");
+            //         Runnable::noop()
+            //     }
+            //     Some(s) => Runnable::Action(Action::RegisterFile(s.as_str().to_owned())),
+            // }
+        }
+        _ => unreachable!(),
+    };
+
+    Some(opt)
+}
+
+fn get_builtin(line: &str) -> Option<Runnable> {
+    match line {
+        "exit" | "quit" => Some(Runnable::exit(None)),
+        "help" => {
+            print_help();
+            Some(Runnable::noop())
+        }
+        x => {
+            lazy_static! {
+                static ref BUILTIN: Regex = {
+                    trace!("init built-in regex");
+                    Regex::new(include_str!("builtin.regex")).unwrap()
+                };
+            }
+            BUILTIN.captures(x).and_then(parse_command_input)
+            // unimplemented!()
         }
     }
 }
 
-fn get_builtin<'a>(line: &str) -> Option<Runnable> {
-    match line {
-        "exit" | "quit" => Some(Runnable::Action(Action::Exit(None))),
-        _ => None,
-    }
+fn print_help() {
+    println!("\n{}", include_str!("help.txt").trim_end());
 }
 
 fn parse_shell_input(input: &str) -> Vec<String> {
     input
         .split_whitespace()
-        .into_iter()
-        .filter(|s| s.trim().len() > 0)
+        // .into_iter()
+        .filter(|s| !s.trim().is_empty())
         .map(|s| s.to_owned())
         .collect()
 }
@@ -140,14 +275,49 @@ fn handle_line(ctx: &mut Context, line: &str) -> Action {
         .run()
 }
 
-fn init_context() -> Context {
-    Context::new()
+fn init_context(cfg: &MshConfig) -> Context {
+    let mut ctx = Default::default();
+    register_paths(&mut ctx, &cfg.preload_dirs);
+
+    ctx
 }
 
-fn repl_loop() -> Result<(), String> {
+fn handle_loop_error(err: ReadlineError) {
+    match err {
+        ReadlineError::Interrupted => {
+            println!("CTRL-C");
+        }
+        ReadlineError::Eof => {
+            println!("CTRL-D");
+        }
+        err => {
+            println!("Error: {:?}", err);
+        }
+    };
+}
+
+fn register_paths(ctx: &mut Context, paths: &Vec<String>) {
+    for path in paths {
+        let (real_path, new) = match ctx.register(PathBuf::from(&path)) {
+            Ok(x) => x,
+            Err(e) => {
+                eprintln!("Cannot register path {}: {}", path, e);
+                continue;
+            }
+        };
+
+        if new {
+            println!("Registered new path: {}", real_path.display());
+        } else {
+            println!("Already Registered: {}", real_path.display());
+        };
+    }
+}
+
+fn repl_loop(cfg: &MshConfig) -> Result<(), String> {
     let mut rl = init_editor();
     let hist_path = load_history(&mut rl);
-    let mut ctx = init_context();
+    let mut ctx = init_context(cfg);
 
     info!("Starting REPL");
 
@@ -170,18 +340,14 @@ fn repl_loop() -> Result<(), String> {
                         break;
                     }
                     Action::Buffer(s) => ctx.push_buffer(&s),
+                    Action::Register(v) => register_paths(&mut ctx, &v),
+                    Action::Dump => {
+                        println!("{}", &ctx);
+                    }
                 };
             }
-            Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
-                break;
-            }
-            Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
-                break;
-            }
-            Err(err) => {
-                println!("Error: {:?}", err);
+            Err(e) => {
+                handle_loop_error(e);
                 break;
             }
         }
@@ -237,9 +403,67 @@ fn init_editor() -> Editor<()> {
     rl
 }
 
+fn get_boxed_file(name: &str) -> Result<Box<dyn Read>, String> {
+    Ok(Box::new(File::open(name).map_err(to_string)?))
+}
+
+fn to_string(obj: impl std::string::ToString) -> String {
+    obj.to_string()
+}
+
+fn read_registry_file(name: &str) -> Result<Vec<String>, String> {
+    let mut reader: Box<dyn Read> = match name {
+        "-" => Box::new(stdin()),
+        x => get_boxed_file(x)?,
+    };
+
+    let mut buf = String::new();
+    reader.read_to_string(&mut buf).map_err(to_string)?;
+
+    Ok(buf.split_whitespace().map(|s| s.to_owned()).collect())
+}
+
+fn parse_args() -> Result<MshConfig, String> {
+    let matches = app_from_crate!().arg(
+        Arg::with_name("registry")
+            .short("r")
+            .long("registry")
+            .value_name("FILE")
+            .help("pre-loads registered directories")
+            .long_help("A whitespace-separated list of directories to automatically register.  '-' reads from stdin.")).get_matches();
+
+    let mut cfg_build = MshConfigBuilder::default();
+
+    if let Some(x) = matches.value_of("registry") {
+        match read_registry_file(x) {
+            Ok(v) => {
+                cfg_build.preload_dirs(v);
+            }
+            Err(e) => {
+                warn!("{}", e);
+            }
+        };
+    };
+    cfg_build.build()
+}
+
 fn main() {
     env_logger::init();
-    match repl_loop() {
+
+    let cfg = match parse_args() {
+        Ok(c) => c,
+        Err(s) => {
+            eprintln!("{}", s);
+            return;
+        }
+    };
+
+    if atty::isnt(atty::Stream::Stdin) {
+        eprintln!("Cannot accept piped input");
+        return;
+    }
+
+    match repl_loop(&cfg) {
         Ok(_) => {
             info!("Loop is exiting");
         }

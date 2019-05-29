@@ -2,10 +2,16 @@
 name = "msh"
 version = "0.1.0"
 authors = ["Wesley Van Melle <wvanmelle@ascentis.com>"]
+description = ""
 edition = "2018"
 
 [dependencies]
+atty = "*"
+clap = "*"
+derive_builder = "*"
 dirs = "*"
 env_logger = "*"
+lazy_static = "*"
 log = "*"
+regex = "*"
 rustyline = "*"

@@ -1,0 +1,9 @@
+Built-in commands
+=================
+
+help                                - display this message
+exit, quit                          - exit the shell
+reg, register   DIR...              - add DIR to the list of registered directories
+unreg, unregister   DIR...          - remove DIR from the list of registered directories
+regfile, register-file  FILE        - register each directory read from FILE
+clreg, clear-register   [DIR...]    - clear the registry, optionally adding DIR to theblank registry
