@@ -2,16 +2,23 @@
 name = "msh"
 version = "0.1.0"
 authors = ["Wesley Van Melle <wvanmelle@ascentis.com>"]
-description = ""
+description = "Multi-target shell executor"
+license = "MIT"
 edition = "2018"
+repository = "https://github.com/scruffystuffs/msh"
+readme = "README"
+keywords = ["shell", "cli", "terminal"]
+categories = ["command-line-utilities"]
+
 
 [dependencies]
-atty = "*"
-clap = "*"
-derive_builder = "*"
-dirs = "*"
-env_logger = "*"
-lazy_static = "*"
-log = "*"
-regex = "*"
-rustyline = "*"
+atty = "0.2"
+clap = "2"
+derive_builder = "0.7"
+dirs = "1"
+env_logger = "0.6"
+# lazy_static = "1.3"
+log = "0.4"
+rayon = "1.0.3"
+regex = "1.1"
+rustyline = "4.1"

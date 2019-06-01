@@ -1,1 +1,0 @@
-(?P<command>reg|register|unreg|unregister|regfile|register-file|clreg|clear-register|dump)(?: (?P<args>.*))?
