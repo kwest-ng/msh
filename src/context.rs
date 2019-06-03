@@ -68,6 +68,10 @@ impl Context {
         Ok((real_path, was_there))
     }
 
+    pub fn clear_registry(&mut self) {
+        self.dir_registry.clear();
+    }
+
     pub fn dir_count(&self) -> usize {
         self.dir_registry.len()
     }

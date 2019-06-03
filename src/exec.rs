@@ -88,14 +88,18 @@ where
                     .map(ToOwned::to_owned)
                     .collect(),
             )),
-            ("register-file", _) => {
-                println!("unimplemented command: register-file");
-                Some(Action::Loop)
-            }
-            ("clear-register", _) => {
-                println!("unimplemented command: clear-register");
-                Some(Action::Loop)
-            }
+            ("register-file", Some(args)) => Some(Action::RegisterFile(
+                args.value_of("FILE").unwrap().to_owned(),
+            )),
+            ("clear-register", Some(args)) => Some(Action::ClearRegistry(
+                {
+                    if args.is_present("DIRS") {
+                        args.values_of("DIRS").unwrap().map(ToOwned::to_owned).collect()
+                    } else {
+                        Vec::new()
+                    }
+                }
+            )),
             _ => unreachable!(),
         },
     }

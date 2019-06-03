@@ -22,8 +22,8 @@ pub(crate) enum Action {
     Buffer(String),
     Register(Vec<String>),
     Unregister(Vec<String>),
-    // RegisterFile(String),
-    // ClearRegistry(Vec<String>),
+    RegisterFile(String),
+    ClearRegistry(Vec<String>),
     ChDir(String),
     // StoreEnv{ name: String, value: String },
     // RemoveEnv{ name: String },
@@ -150,6 +150,20 @@ pub(crate) fn repl_loop(cfg: &MshConfig) -> Result<(), String> {
                     Action::Buffer(s) => ctx.push_buffer(&s),
                     Action::Register(v) => context::register_paths(&mut ctx, &v),
                     Action::Unregister(v) => context::unregister_paths(&mut ctx, &v),
+                    Action::ClearRegistry(v) => {
+                        ctx.clear_registry();
+                        context::register_paths(&mut ctx, &v);
+                    }
+                    Action::RegisterFile(s) => {
+                        match context::read_registry_file(&s) {
+                            Ok(v) => {
+                                context::register_paths(&mut ctx, &v);
+                            }
+                            Err(e) => {
+                                eprintln!("{}", e);
+                            }
+                        };
+                    }
                     Action::Execute(v) => ctx.run_executable(&v),
                     Action::ChDir(p) => {
                         env::set_current_dir(p).unwrap_or_else(|e| {
