@@ -6,6 +6,7 @@
 
 use std::borrow::ToOwned;
 use std::collections::HashSet;
+use std::env;
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::fs::File;
 use std::io::prelude::*;
@@ -67,7 +68,11 @@ impl Context {
         Ok((real_path, was_there))
     }
 
-    pub fn run_executable(&self, args: &[String]) {
+    pub fn dir_count(&self) -> usize {
+        self.dir_registry.len()
+    }
+
+    pub fn run_executable(&mut self, args: &[String]) {
         assert!(!args.is_empty());
         debug!("Execute command: {:?}", args);
         if log_enabled!(log::Level::Trace) {
@@ -79,6 +84,18 @@ impl Context {
                 trace!("Registered directory: {}", dir.display());
             }
         };
+
+        let empty = self.dir_registry.is_empty();
+
+        if empty {
+            let curdir = env::current_dir().expect("Current dir could not be read.");
+            debug!(
+                "no registered directories: executing against curdir: {}",
+                curdir.display()
+            );
+            self.dir_registry.insert(curdir);
+        }
+
         self.dir_registry
             .iter()
             .map(|p| {
@@ -104,6 +121,10 @@ impl Context {
                 };
             })
             .for_each(drop);
+
+        if empty {
+            self.dir_registry.clear();
+        }
     }
 }
 
@@ -115,6 +136,18 @@ impl Display for Context {
         }
         Ok(())
     }
+}
+
+pub(crate) fn get_home_dir<'a>() -> &'a str {
+    lazy_static::lazy_static! {
+        static ref HOME: String = dirs::home_dir()
+            .expect("HOME or equivalent not set")
+            .to_str()
+            .expect("HOME or equivalent is not valid UTF-8")
+            .into();
+    }
+
+    &HOME
 }
 
 fn get_boxed_file(name: &str) -> Result<Box<dyn Read>, String> {

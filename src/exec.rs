@@ -16,7 +16,7 @@ use clap::{
 use std::borrow::ToOwned;
 use std::ffi::OsString;
 
-use crate::context::{self, Context, MshConfig, MshConfigBuilder};
+use crate::context::{self, get_home_dir, Context, MshConfig, MshConfigBuilder};
 use crate::parser;
 use crate::repl::Action;
 
@@ -30,6 +30,10 @@ where
         .subcommand(SubCommand::with_name("exit").visible_alias("quit"))
         .subcommand(SubCommand::with_name("help"))
         .subcommand(SubCommand::with_name("dump"))
+        .subcommand(
+            SubCommand::with_name("cd")
+                .arg(Arg::with_name("DIR").index(1).default_value(get_home_dir())),
+        )
         .subcommand(
             SubCommand::with_name("register")
                 .visible_alias("reg")
@@ -52,26 +56,19 @@ where
         );
 
     match builtins.get_matches_from_safe_borrow(args) {
-        Err(e) => {
-            // if let clap::ErrorKind::UnrecognizedSubcommand = e.kind {
-            //     return None;
-            // } else {
-            //     error!("Builtin parsing error: {:?}", e);
-            //     Some(Action::Loop)
-            // }
-            match e.kind {
-                UnknownArgument | UnrecognizedSubcommand => {
-                    debug!("Line does not match any known builtin, forwarding to command executor");
-                    None
-                }
-                _ => {
-                    error!("Builtin parsing error: {:?}", e);
-                    Some(Action::Loop)
-                }
+        Err(e) => match e.kind {
+            UnknownArgument | UnrecognizedSubcommand => {
+                debug!("Line does not match any known builtin, forwarding to command executor");
+                None
             }
-        }
+            _ => {
+                error!("Builtin parsing error: {:?}", e);
+                Some(Action::Loop)
+            }
+        },
         Ok(x) => match x.subcommand() {
             ("exit", _) => Some(Action::Exit(None)),
+            ("cd", Some(args)) => Some(Action::ChDir(args.value_of("DIR").unwrap().to_owned())),
             ("help", _) => {
                 builtins
                     .print_long_help()
@@ -129,7 +126,7 @@ pub(crate) fn handle_line(ctx: &mut Context, line: &str) -> Action {
 
     get_builtin(&args).unwrap_or_else(|| {
         debug!("reading line into process executor: {}", &full_line);
-        Action::Execute(args)
+        Action::Execute(args.iter().map(ToString::to_string).collect())
     })
     // unimplemented!()
 }

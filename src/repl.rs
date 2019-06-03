@@ -24,7 +24,7 @@ pub(crate) enum Action {
     Unregister(Vec<String>),
     // RegisterFile(String),
     // ClearRegistry(Vec<String>),
-    // Execute(Vec<String>),
+    ChDir(String),
     // StoreEnv{ name: String, value: String },
     // RemoveEnv{ name: String },
     Execute(Vec<String>),
@@ -38,17 +38,27 @@ fn find_history_file() -> Option<PathBuf> {
     })
 }
 
-fn get_cwd() -> IOResult<String> {
+pub fn get_cwd() -> IOResult<String> {
     let cwd = env::current_dir()?.to_string_lossy().to_string();
     debug!("current dir: {}", cwd);
-    Ok(cwd)
+    let home = context::get_home_dir();
+    let len = home.len();
+    if cwd.starts_with(&home) {
+        Ok(format!("~{}", &cwd[len..]))
+    } else {
+        Ok(cwd)
+    }
 }
 
 fn get_prompt(ctx: &Context) -> IOResult<String> {
     if ctx.has_buffer() {
         Ok("... ".to_owned())
     } else {
-        let mut prompt = get_cwd()?;
+        let mut prompt = String::with_capacity(40);
+        prompt.push('(');
+        prompt.push_str(&ctx.dir_count().to_string());
+        prompt.push_str(") ");
+        prompt.push_str(&get_cwd()?);
         prompt.push_str("> ");
 
         trace!("prompt generated: {}", prompt);
@@ -141,6 +151,11 @@ pub(crate) fn repl_loop(cfg: &MshConfig) -> Result<(), String> {
                     Action::Register(v) => context::register_paths(&mut ctx, &v),
                     Action::Unregister(v) => context::unregister_paths(&mut ctx, &v),
                     Action::Execute(v) => ctx.run_executable(&v),
+                    Action::ChDir(p) => {
+                        env::set_current_dir(p).unwrap_or_else(|e| {
+                            println!("ChDir error: {}", e);
+                        });
+                    }
                     Action::Dump => {
                         println!("{}", &ctx);
                     }
