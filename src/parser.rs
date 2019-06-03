@@ -10,7 +10,7 @@ pub(crate) fn expand_line(line: &str) -> Result<Vec<String>, &'static str> {
         // trace!("Line expansion: index {}, char {}", i+1, b as char);
         match b {
             b' ' | b'\t' => {
-                bytes.next();  // Move peek to next byte, skip current
+                bytes.next(); // Move peek to next byte, skip current
             }
             _ => {
                 if let Some(v) = arg(line, &mut bytes)? {
@@ -40,8 +40,9 @@ fn expand_var(s: &str) -> String {
             b'\\' => {
                 // buf.push(b as char);
                 // Treat the next char as normal
-                bytes.next();  // Skip backslash
-                match bytes.next() {  // Move peek to next byte, but consume the current one.
+                bytes.next(); // Skip backslash
+                match bytes.next() {
+                    // Move peek to next byte, but consume the current one.
                     Some(b) => {
                         buf.push(b as char);
                     }
@@ -50,13 +51,13 @@ fn expand_var(s: &str) -> String {
                 }
             }
             b'$' => {
-                bytes.next();  // Skip the leading '$'
+                bytes.next(); // Skip the leading '$'
                 let mut var_name = String::new();
                 while let Some(&b) = bytes.peek() {
                     match b {
                         b'a'...b'z' | b'A'...b'Z' | b'_' | b'0'...b'9' => {
                             var_name.push(b as char);
-                            bytes.next();  // Move peek to next byte
+                            bytes.next(); // Move peek to next byte
                         }
                         _ => {
                             break;
@@ -73,11 +74,11 @@ fn expand_var(s: &str) -> String {
                 let home = get_home_dir();
                 debug!("Expanding ~ to {}", home);
                 buf.push_str(home);
-                bytes.next();  // Move peek to next byte, skip the ~
+                bytes.next(); // Move peek to next byte, skip the ~
             }
             _ => {
                 buf.push(b as char);
-                bytes.next();  // Move peek to next byte, take the char.
+                bytes.next(); // Move peek to next byte, take the char.
             }
         }
     }
@@ -112,7 +113,7 @@ where
             // We pass in i, the index of a quote, but start a character later. This ensures
             // the production rules will produce strings with the quotes intact
             b'"' => {
-                bytes.next();  
+                bytes.next();
                 double_quoted(line, bytes, i)?;
             }
             b'\'' => {

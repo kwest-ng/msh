@@ -91,15 +91,16 @@ where
             ("register-file", Some(args)) => Some(Action::RegisterFile(
                 args.value_of("FILE").unwrap().to_owned(),
             )),
-            ("clear-register", Some(args)) => Some(Action::ClearRegistry(
-                {
-                    if args.is_present("DIRS") {
-                        args.values_of("DIRS").unwrap().map(ToOwned::to_owned).collect()
-                    } else {
-                        Vec::new()
-                    }
+            ("clear-register", Some(args)) => Some(Action::ClearRegistry({
+                if args.is_present("DIRS") {
+                    args.values_of("DIRS")
+                        .unwrap()
+                        .map(ToOwned::to_owned)
+                        .collect()
+                } else {
+                    Vec::new()
                 }
-            )),
+            })),
             _ => unreachable!(),
         },
     }
