@@ -4,6 +4,8 @@
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::multiple_crate_versions)]
 
+use colored::*;
+
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::config::{Configurer, OutputStreamType};
 use rustyline::error::ReadlineError;
@@ -21,9 +23,6 @@ use std::string::ToString;
 
 use crate::context::{self, Context, MshConfig};
 use crate::parser;
-
-static COLORED_PROMPT: &'static str = "\x1b[1;32m>\x1b[0m ";
-static PROMPT: &'static str = "> ";
 
 struct MshHelper(FilenameCompleter, MatchingBracketHighlighter, HistoryHinter);
 
@@ -48,15 +47,11 @@ impl Hinter for MshHelper {
 
 impl Highlighter for MshHelper {
     fn highlight_prompt<'p>(&self, prompt: &'p str) -> Cow<'p, str> {
-        if prompt == PROMPT {
-            Borrowed(COLORED_PROMPT)
-        } else {
-            Borrowed(prompt)
-        }
+        Borrowed(prompt)
     }
 
     fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
-        Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
+        Owned(hint.dimmed().to_string())
     }
 
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
@@ -116,13 +111,12 @@ fn get_prompt(ctx: &Context) -> IOResult<String> {
         Ok("... ".to_owned())
     } else {
         let mut prompt = String::with_capacity(40);
-        prompt.push('(');
-        prompt.push_str(&ctx.dir_count().to_string());
-        prompt.push_str(") ");
-        prompt.push_str(&get_cwd()?);
+        let count = ctx.dir_count();
+        prompt.push_str(&format!("({}) ", count).blue().to_string());
+        prompt.push_str(&get_cwd()?.green().to_string());
         prompt.push_str("> ");
 
-        trace!("prompt generated: {}", prompt);
+        trace!("prompt generated: {:?}", prompt);
         Ok(prompt)
     }
 }
