@@ -25,8 +25,8 @@ pub(crate) enum Action {
     RegisterFile(String),
     ClearRegistry(Vec<String>),
     ChDir(String),
-    // StoreEnv{ name: String, value: String },
-    // RemoveEnv{ name: String },
+    StoreEnv{ name: String, value: String },
+    RemoveEnv{ name: String },
     Execute(Vec<String>),
     Exit(Option<String>),
 }
@@ -170,6 +170,8 @@ pub(crate) fn repl_loop(cfg: &MshConfig) -> Result<(), String> {
                             println!("ChDir error: {}", e);
                         });
                     }
+                    Action::StoreEnv{name, value} => env::set_var(name, value),
+                    Action::RemoveEnv{name} => env::remove_var(name),
                     Action::Dump => {
                         println!("{}", &ctx);
                     }

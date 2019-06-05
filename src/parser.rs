@@ -35,6 +35,12 @@ where
         )
         .subcommand(SubCommand::with_name("echo").about("Prints all arguments").arg(Arg::with_name("ARGS").multiple(true)))
         .subcommand(
+            SubCommand::with_name("var").about("Set or delete environment variables")
+                .arg(Arg::with_name("NAME").required(true))
+                .arg(Arg::with_name("VALUE"))
+                .arg(Arg::with_name("DELETE").short("d").long("delete").help("Deletes NAME from the environment")),
+        )
+        .subcommand(
             SubCommand::with_name("register").about("Add directories to the registry")
                 .visible_alias("reg")
                 .arg(Arg::with_name("DIRS").required(true).min_values(1)),
@@ -78,6 +84,17 @@ where
                 let joined = args.values_of_lossy("ARGS").unwrap_or_else(Vec::new).join(" ");
                 println!("{}", joined);
                 Some(Action::Loop)
+            }
+            ("var", Some(args)) => {
+                let name = args.value_of("NAME").unwrap().into();  // Required by the parser
+                let value = args.value_of("VALUE").unwrap().into();  // Default provided py the parser
+                let delete = args.is_present("DELETE");
+                let action = if delete {
+                    Action::RemoveEnv{name}
+                } else {
+                    Action::StoreEnv{name, value}
+                };
+                Some(action)
             }
             ("help", _) => {
                 builtins
