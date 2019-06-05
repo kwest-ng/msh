@@ -30,7 +30,7 @@ fn main() {
     };
 
     if atty::isnt(atty::Stream::Stdin) {
-        eprintln!("Cannot accept piped input");
+        eprintln!("msh: error: cannot accept piped input");
         return;
     }
 
