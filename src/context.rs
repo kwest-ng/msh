@@ -104,28 +104,7 @@ impl Context {
 
         self.dir_registry
             .par_iter()
-            .map(|p| {
-                let raw_output = match Command::new(&args[0])
-                    .args(args.iter().skip(1))
-                    .current_dir(p)
-                    .output()
-                {
-                    Ok(o) => o,
-                    Err(e) => {
-                        eprintln!(
-                            "Could not execute process on dir: {}, failed with error: {}",
-                            p.display(),
-                            e
-                        );
-                        return;
-                    }
-                };
-
-                let output = String::from_utf8_lossy(&raw_output.stdout);
-                if !output.trim().is_empty() {
-                    println!("{}:\n{}", &p.display(), output)
-                };
-            })
+            .map(|p| run_executable(args, p))
             .for_each(drop);
 
         if empty {
@@ -144,7 +123,30 @@ impl Display for Context {
     }
 }
 
-pub(crate) fn get_home_dir<'a>() -> &'a str {
+fn run_executable(args: &[String], path: &PathBuf) {
+    let raw_output = match Command::new(&args[0])
+        .args(args.iter().skip(1))
+        .current_dir(path)
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!(
+                "Could not execute process on dir: {}, failed with error: {}",
+                path.display(),
+                e
+            );
+            return;
+        }
+    };
+
+    let output = String::from_utf8_lossy(&raw_output.stdout);
+    if !output.trim().is_empty() {
+        println!("{}:\n{}", &path.display(), output)
+    };
+}
+
+pub(crate) fn get_home_dir() -> &'static str {
     lazy_static::lazy_static! {
         static ref HOME: String = dirs::home_dir()
             .expect("HOME or equivalent not set")
