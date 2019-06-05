@@ -7,7 +7,7 @@
 
 use clap::{
     App, AppSettings, Arg,
-    ErrorKind::{UnknownArgument, UnrecognizedSubcommand, HelpDisplayed},
+    ErrorKind::{HelpDisplayed, UnknownArgument, UnrecognizedSubcommand},
     SubCommand,
 };
 
@@ -18,45 +18,64 @@ use std::iter::Peekable;
 use crate::context::{self, get_home_dir, Context, MshConfig, MshConfigBuilder};
 use crate::repl::Action;
 
-
 fn get_builtin<I, T>(args: I) -> Option<Action>
 where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let mut builtins = App::new("builtins").usage("[SUBCOMMAND]")
+    let mut builtins = App::new("builtins")
+        .usage("[SUBCOMMAND]")
         .settings(&[AppSettings::NoBinaryName, AppSettings::ColorNever])
-        .subcommand(SubCommand::with_name("exit").visible_alias("quit").about("Terminates the shell"))
+        .subcommand(
+            SubCommand::with_name("exit")
+                .visible_alias("quit")
+                .about("Terminates the shell"),
+        )
         .subcommand(SubCommand::with_name("help").about("Displays this help message"))
         .subcommand(SubCommand::with_name("dirs").about("Prints all registered directories"))
         .subcommand(
-            SubCommand::with_name("cd").about("Change the current working directory")
+            SubCommand::with_name("cd")
+                .about("Change the current working directory")
                 .arg(Arg::with_name("DIR").index(1).default_value(get_home_dir())),
         )
-        .subcommand(SubCommand::with_name("echo").about("Prints all arguments").arg(Arg::with_name("ARGS").multiple(true)))
         .subcommand(
-            SubCommand::with_name("var").about("Set or delete environment variables")
-                .arg(Arg::with_name("NAME").required(true))
-                .arg(Arg::with_name("VALUE"))
-                .arg(Arg::with_name("DELETE").short("d").long("delete").help("Deletes NAME from the environment")),
+            SubCommand::with_name("echo")
+                .about("Prints all arguments")
+                .arg(Arg::with_name("ARGS").multiple(true)),
         )
         .subcommand(
-            SubCommand::with_name("register").about("Add directories to the registry")
+            SubCommand::with_name("var")
+                .about("Set or delete environment variables")
+                .arg(Arg::with_name("NAME").required(true))
+                .arg(Arg::with_name("VALUE"))
+                .arg(
+                    Arg::with_name("DELETE")
+                        .short("d")
+                        .long("delete")
+                        .help("Deletes NAME from the environment"),
+                ),
+        )
+        .subcommand(
+            SubCommand::with_name("register")
+                .about("Add directories to the registry")
                 .visible_alias("reg")
                 .arg(Arg::with_name("DIRS").required(true).min_values(1)),
         )
         .subcommand(
-            SubCommand::with_name("unregister").about("Remove directories from the registry")
+            SubCommand::with_name("unregister")
+                .about("Remove directories from the registry")
                 .visible_alias("unreg")
                 .arg(Arg::with_name("DIRS").required(true).min_values(1)),
         )
         .subcommand(
-            SubCommand::with_name("register-file").about("Add all directories from FILE to the registry")
+            SubCommand::with_name("register-file")
+                .about("Add all directories from FILE to the registry")
                 .visible_alias("regfile")
                 .arg(Arg::with_name("FILE").required(true)),
         )
         .subcommand(
-            SubCommand::with_name("clear-register").about("Remove all directories from the registry")
+            SubCommand::with_name("clear-register")
+                .about("Remove all directories from the registry")
                 .visible_alias("clreg")
                 .arg(Arg::with_name("DIRS").multiple(true)),
         );
@@ -81,18 +100,21 @@ where
             ("exit", _) => Some(Action::Exit(None)),
             ("cd", Some(args)) => Some(Action::ChDir(args.value_of("DIR").unwrap().to_owned())),
             ("echo", Some(args)) => {
-                let joined = args.values_of_lossy("ARGS").unwrap_or_else(Vec::new).join(" ");
+                let joined = args
+                    .values_of_lossy("ARGS")
+                    .unwrap_or_else(Vec::new)
+                    .join(" ");
                 println!("{}", joined);
                 Some(Action::Loop)
             }
             ("var", Some(args)) => {
-                let name = args.value_of("NAME").unwrap().into();  // Required by the parser
-                let value = args.value_of("VALUE").unwrap().into();  // Default provided py the parser
+                let name = args.value_of("NAME").unwrap().into(); // Required by the parser
+                let value = args.value_of("VALUE").unwrap().into(); // Default provided py the parser
                 let delete = args.is_present("DELETE");
                 let action = if delete {
-                    Action::RemoveEnv{name}
+                    Action::RemoveEnv { name }
                 } else {
-                    Action::StoreEnv{name, value}
+                    Action::StoreEnv { name, value }
                 };
                 Some(action)
             }
@@ -100,7 +122,7 @@ where
                 builtins
                     .print_long_help()
                     .expect("Failed to print builtin help message");
-                println!("");
+                println!();
                 Some(Action::Loop)
             }
             ("register", Some(args)) => Some(Action::Register(
@@ -189,8 +211,6 @@ pub(crate) fn parse_external_args() -> Result<MshConfig, String> {
     };
     cfg_build.build()
 }
-
-
 
 pub(crate) fn expand_line(line: &str) -> Result<Vec<String>, &'static str> {
     let mut bytes = line.bytes().enumerate().peekable();
