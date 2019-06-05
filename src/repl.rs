@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::string::ToString;
 
 use crate::context::{self, Context, MshConfig};
-use crate::exec;
+use crate::parser;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub(crate) enum Action {
@@ -139,7 +139,7 @@ pub(crate) fn repl_loop(cfg: &MshConfig) -> Result<(), String> {
         match rl.readline(&prompt) {
             Ok(line) => {
                 // rl.add_history_entry(line.as_str());
-                match exec::handle_line(&mut ctx, &line) {
+                match parser::handle_line(&mut ctx, &line) {
                     Action::Loop => {}
                     Action::Exit(opt_s) => {
                         if let Some(s) = opt_s {

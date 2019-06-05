@@ -14,14 +14,14 @@ extern crate log;
 use env_logger;
 
 mod context;
-mod exec;
+// mod exec;
 mod parser;
 mod repl;
 
 fn main() {
     env_logger::init();
 
-    let cfg = match exec::parse_external_args() {
+    let cfg = match parser::parse_external_args() {
         Ok(c) => c,
         Err(s) => {
             eprintln!("{}", s);
