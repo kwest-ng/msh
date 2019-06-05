@@ -4,6 +4,8 @@
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::multiple_crate_versions)]
 
+use rayon::prelude::*;
+
 use std::borrow::ToOwned;
 use std::collections::HashSet;
 use std::env;
@@ -101,7 +103,7 @@ impl Context {
         }
 
         self.dir_registry
-            .iter()
+            .par_iter()
             .map(|p| {
                 let raw_output = match Command::new(&args[0])
                     .args(args.iter().skip(1))
