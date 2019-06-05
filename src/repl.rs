@@ -4,9 +4,16 @@
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::multiple_crate_versions)]
 
-use rustyline::{config::Configurer, error::ReadlineError, Cmd, Editor, Helper, KeyPress};
+use rustyline::completion::{Completer, FilenameCompleter, Pair};
+use rustyline::config::{Configurer, OutputStreamType};
+use rustyline::error::ReadlineError;
+use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
+use rustyline::hint::{Hinter, HistoryHinter};
+use rustyline::{
+    Cmd, CompletionType, Config, Context as RLContext, EditMode, Editor, Helper, KeyPress,
+};
 
-use std::borrow::ToOwned;
+use std::borrow::{Cow, Cow::Borrowed, Cow::Owned, ToOwned};
 use std::env;
 use std::io::{Error as IOError, ErrorKind, Result as IOResult};
 use std::path::PathBuf;
@@ -14,6 +21,60 @@ use std::string::ToString;
 
 use crate::context::{self, Context, MshConfig};
 use crate::parser;
+
+static COLORED_PROMPT: &'static str = "\x1b[1;32m>\x1b[0m ";
+static PROMPT: &'static str = "> ";
+
+struct MshHelper(FilenameCompleter, MatchingBracketHighlighter, HistoryHinter);
+
+impl Completer for MshHelper {
+    type Candidate = Pair;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &RLContext<'_>,
+    ) -> Result<(usize, Vec<Pair>), ReadlineError> {
+        self.0.complete(line, pos, ctx)
+    }
+}
+
+impl Hinter for MshHelper {
+    fn hint(&self, line: &str, pos: usize, ctx: &RLContext<'_>) -> Option<String> {
+        self.2.hint(line, pos, ctx)
+    }
+}
+
+impl Highlighter for MshHelper {
+    fn highlight_prompt<'p>(&self, prompt: &'p str) -> Cow<'p, str> {
+        if prompt == PROMPT {
+            Borrowed(COLORED_PROMPT)
+        } else {
+            Borrowed(prompt)
+        }
+    }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        Owned("\x1b[1m".to_owned() + hint + "\x1b[m")
+    }
+
+    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+        self.1.highlight(line, pos)
+    }
+
+    fn highlight_char(&self, line: &str, pos: usize) -> bool {
+        self.1.highlight_char(line, pos)
+    }
+}
+
+impl Helper for MshHelper {}
+
+impl Default for MshHelper {
+    fn default() -> Self {
+        Self(FilenameCompleter::default(), MatchingBracketHighlighter::default(), HistoryHinter {},)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub(crate) enum Action {
@@ -90,9 +151,17 @@ fn init_context(cfg: &MshConfig) -> Context {
     ctx
 }
 
-fn init_editor() -> Editor<()> {
+fn init_editor() -> Editor<MshHelper> {
     debug!("Init Editor");
-    let mut rl = Editor::<()>::new();
+    let config = Config::builder()
+        .history_ignore_space(true)
+        .completion_type(CompletionType::List)
+        .edit_mode(EditMode::Emacs)
+        .output_stream(OutputStreamType::Stdout)
+        .build();
+    let helper = MshHelper::default();
+    let mut rl = Editor::with_config(config);
+    rl.set_helper(Some(helper));
 
     trace!("history auto add: true");
     rl.set_auto_add_history(true);
