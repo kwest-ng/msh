@@ -4,6 +4,8 @@
 #![allow(clippy::default_trait_access)]
 #![allow(clippy::multiple_crate_versions)]
 
+use colored::Colorize;
+
 use rayon::prelude::*;
 
 use std::borrow::ToOwned;
@@ -142,7 +144,7 @@ fn run_executable(args: &[String], path: &PathBuf) {
 
     let output = String::from_utf8_lossy(&raw_output.stdout);
     if !output.trim().is_empty() {
-        println!("{}:\n{}", &path.display(), output)
+        println!("{}:\n{}", &path.to_str().unwrap().cyan().bold().to_string(), output)
     };
 }
 

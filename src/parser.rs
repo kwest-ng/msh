@@ -96,7 +96,7 @@ where
             }
         },
         Ok(x) => match x.subcommand() {
-            ("dump", _) => Some(Action::Dump),
+            ("dirs", _) => Some(Action::Dump),
             ("exit", _) => Some(Action::Exit(None)),
             ("cd", Some(args)) => Some(Action::ChDir(args.value_of("DIR").unwrap().to_owned())),
             ("echo", Some(args)) => {
